@@ -21,6 +21,7 @@ import urllib.request
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
+from matplotlib.patches import FancyBboxPatch
 
 # ── Tokens du design system ──────────────────────────────────────────────────
 COLORS = {
@@ -129,6 +130,32 @@ def footer(fig, note=None, signature=True):
     if signature:
         fig.text(0.9715, 14 / h, "▪ NMLab", fontsize=16.5,
                  color=COLORS["muted"], va="bottom", ha="right")
+
+
+def blank_axes(fig):
+    """Toile plein cadre en coordonnées PIXELS (origine bas-gauche, y vers le haut),
+    sans axes ni grille — pour les figures-schémas (cartes, encadrés).
+
+    1 unité de données = 1 pixel dans les deux directions, donc les coins arrondis
+    de ``card`` restent circulaires sans avoir à forcer l'aspect."""
+    h = fig.get_size_inches()[1] * DPI
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, WIDTH_PX)
+    ax.set_ylim(0, h)
+    ax.axis("off")
+    return ax
+
+
+def card(ax, x, y, w, h, *, edge, fill=None, lw=2.4, radius=16):
+    """Carte arrondie au style NMLab, occupant exactement [x, x+w] × [y, y+h]
+    (coordonnées pixels de ``blank_axes``). ``edge`` = couleur du liseré."""
+    box = FancyBboxPatch(
+        (x + radius, y + radius), w - 2 * radius, h - 2 * radius,
+        boxstyle=f"round,pad={radius},rounding_size={radius}",
+        linewidth=lw, edgecolor=edge,
+        facecolor=fill if fill else COLORS["card"], zorder=2)
+    ax.add_patch(box)
+    return box
 
 
 def thousands(lang="fr"):
