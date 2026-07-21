@@ -19,13 +19,17 @@ ARTICLE_EN = "https://nmlab.io/en/ressources/data-workshop-discovering-fred"
 
 # ── Cellules communes ────────────────────────────────────────────────────────
 
-def intro_md(title_fr, title_en):
+def intro_md(title_fr, title_en, live=True):
+    run_fr = ("la figure se régénère avec les **données FRED du jour**" if live
+              else "la figure est régénérée par le code — un **schéma éditable** : changez les libellés à votre guise")
+    run_en = ("rebuild the figure with **today's FRED data**" if live
+              else "rebuild the figure from code — an **editable diagram**: change the labels as you like")
     return f"""# {title_fr} · *{title_en}*
 
 Notebook compagnon du chapitre **18. Atelier données : découvrir FRED, l'entrepôt de la Réserve fédérale** — [lire l'article]({ARTICLE_FR}).
 Companion notebook to chapter **18. Data Workshop: Discovering FRED** — [read the article]({ARTICLE_EN}).
 
-**Exécutez l'unique cellule ci-dessous** (bouton ▶ ou Ctrl+Entrée) : la figure se régénère avec les **données FRED du jour**. Passez `LANG = "en"` en tête de cellule pour les libellés anglais. — Run the single cell below (▶ or Ctrl+Enter) to rebuild the figure with **today's FRED data**; set `LANG = "en"` at the top for English labels.
+**Exécutez l'unique cellule ci-dessous** (bouton ▶ ou Ctrl+Entrée) : {run_fr}. Passez `LANG = "en"` en tête de cellule pour les libellés anglais. — Run the single cell below (▶ or Ctrl+Enter) to {run_en}; set `LANG = "en"` at the top for English labels.
 
 Code : licence MIT · © 2026 [NMLab](https://nmlab.io) · dépôt [nmlab-finance/nmlab-figures](https://github.com/nmlab-finance/nmlab-figures)"""
 
@@ -210,6 +214,92 @@ nm.header(fig, L["title"], L["sub"])
 nm.footer(fig, L["note"])'''
 
 
+# ── Figure 04 — la trousse de départ (schéma) ────────────────────────────────
+
+DATA_04 = '''# Les sept codes de la trousse de départ (fixes) / the seven starter-kit codes
+CODES = ["GDPC1", "CPIAUCSL", "UNRATE", "PAYEMS", "FEDFUNDS", "DGS10", "USREC"]'''
+
+FIG_04 = '''L = {
+    "fr": dict(
+        title="La trousse de départ du macro-observateur",
+        sub="Sept codes FRED à mettre en favori — l'essentiel d'une économie",
+        desc=["PIB réel", "indice des prix \\u2192 inflation", "taux de chômage",
+              "emploi salarié non agricole", "taux directeur de la Fed",
+              "taux à 10 ans", "récessions (NBER)"]),
+    "en": dict(
+        title="The macro-watcher's starter kit",
+        sub="Seven FRED codes to bookmark — the essentials of an economy",
+        desc=["real GDP", "price index \\u2192 inflation", "unemployment rate",
+              "nonfarm payroll employment", "Fed policy rate",
+              "10-year yield", "recessions (NBER)"]),
+}[LANG]
+
+fig = nm.figure(height_px=1140)
+ax = nm.blank_axes(fig)
+
+TOP, CH, GAP = 930, 96, 26            # haut du 1er encadré, hauteur, écart (px)
+CARD_X, CARD_W = 100, 470
+for i, (code, desc) in enumerate(zip(CODES, L["desc"])):
+    top = TOP - i * (CH + GAP)
+    nm.card(ax, CARD_X, top - CH, CARD_W, CH, edge=nm.COLORS["blue"])
+    ax.text(CARD_X + CARD_W / 2, top - CH / 2, code, ha="center", va="center",
+            family="monospace", fontsize=30, fontweight="bold", color=nm.COLORS["blue"])
+    ax.text(640, top - CH / 2, desc, ha="left", va="center",
+            fontsize=29, color=nm.COLORS["text"])
+
+nm.header(fig, L["title"], L["sub"])
+nm.footer(fig)'''
+
+
+# ── Figure 05 — les cousins de FRED (schéma) ─────────────────────────────────
+
+DATA_05 = '''# Schéma : rien à charger (les entrées vivent dans la cellule figure)
+# Diagram: nothing to load (entries live in the figure cell)'''
+
+FIG_05 = '''L = {
+    "fr": dict(
+        title="FRED n'est pas seul : ses cousins",
+        sub="Où trouver les données quand elles ne sont pas américaines",
+        cards=[
+            ("Famille FRED", nm.COLORS["blue"],
+             ["ALFRED — les millésimes", "FRASER — les archives", "API + module Excel"]),
+            ("Europe", nm.COLORS["amber"],
+             ["Eurostat Data Browser", "Portail de données BCE", "INSEE (BDM) \\u00b7 Webstat"]),
+            ("International", nm.COLORS["rose"],
+             ["OECD Data Explorer", "Banque mondiale", "FMI (Data Portal)"]),
+        ]),
+    "en": dict(
+        title="FRED is not alone: its cousins",
+        sub="Where to find the data when it isn't American",
+        cards=[
+            ("FRED family", nm.COLORS["blue"],
+             ["ALFRED — the vintages", "FRASER — the archives", "API + Excel add-in"]),
+            ("Europe", nm.COLORS["amber"],
+             ["Eurostat Data Browser", "ECB Data Portal", "INSEE (BDM) \\u00b7 Webstat"]),
+            ("International", nm.COLORS["rose"],
+             ["OECD Data Explorer", "World Bank Open Data", "IMF Data Portal"]),
+        ]),
+}[LANG]
+
+fig = nm.figure(height_px=1007)
+ax = nm.blank_axes(fig)
+
+CARD_W, GAP, X0 = 486, 94, 55
+TOP, BOTTOM = 737, 177               # bords haut / bas des cartes (px)
+for i, (name, color, lines) in enumerate(L["cards"]):
+    x = X0 + i * (CARD_W + GAP)
+    cx = x + CARD_W / 2
+    nm.card(ax, x, BOTTOM, CARD_W, TOP - BOTTOM, edge=color, lw=2.6, radius=24)
+    ax.text(cx, TOP - 58, name, ha="center", va="center",
+            fontsize=31, fontweight="bold", color=color)
+    for j, line in enumerate(lines):
+        ax.text(cx, 495 - j * 47, line, ha="center", va="center",
+                fontsize=26, color=nm.COLORS["text"])
+
+nm.header(fig, L["title"], L["sub"])
+nm.footer(fig)'''
+
+
 # ── Gabarit pour les prochaines figures ──────────────────────────────────────
 
 TEMPLATE_MD = """# Gabarit de figure NMLab · *NMLab figure template*
@@ -261,6 +351,16 @@ NOTEBOOKS = {
     "fig03-transformations.ipynb": (
         intro_md("La même série, deux histoires", "The same series, two stories"),
         [SETUP, DATA_03, FIG_03],
+    ),
+    "fig04-trousse-depart.ipynb": (
+        intro_md("La trousse de départ du macro-observateur",
+                 "The macro-watcher's starter kit", live=False),
+        [SETUP, DATA_04, FIG_04],
+    ),
+    "fig05-cousins-fred.ipynb": (
+        intro_md("FRED n'est pas seul : ses cousins", "FRED is not alone: its cousins",
+                 live=False),
+        [SETUP, DATA_05, FIG_05],
     ),
 }
 
