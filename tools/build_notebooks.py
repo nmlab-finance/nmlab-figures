@@ -34,12 +34,15 @@ Companion notebook to chapter **18. Data Workshop: Discovering FRED** — [read 
 Code : licence MIT · © 2026 [NMLab](https://nmlab.io) · dépôt [nmlab-finance/nmlab-figures](https://github.com/nmlab-finance/nmlab-figures)"""
 
 
-SETUP = f'''LANG = "fr"   # "en" → libellés anglais / English labels
+SETUP = f'''LANG = "fr"   # "fr" ou "en" — langue des libellés / label language
 
-# Style NMLab (thème sombre + police Inter) / NMLab style (dark theme + Inter font)
+# Récupère puis active le style partagé NMLab (thème sombre + police Inter).
+# Fetch and activate the shared NMLab style (dark theme + Inter font).
 import urllib.request
+
 urllib.request.urlretrieve("{RAW}", "nmlab_style.py")
 import nmlab_style as nm
+
 nm.setup()'''
 
 
@@ -47,10 +50,11 @@ nm.setup()'''
 
 DATA_01 = '''# Jalons du catalogue FRED — source : « The History of FRED », Federal Reserve Bank
 # of St. Louis (valeurs approchées). / FRED catalog milestones (approximate).
-years  = [1991, 1993, 1995, 2004, 2016, 2021, 2026]
-series = [30,   300,  860,  2900, 384_000, 780_000, 845_000]'''
+years = [1991, 1993, 1995, 2004, 2016, 2021, 2026]
+series_count = [30, 300, 860, 2900, 384_000, 780_000, 845_000]'''
 
-FIG_01 = '''L = {
+FIG_01 = '''# ── Libellés bilingues / bilingual labels ────────────────────────────────────
+L = {
     "fr": dict(
         title="De 30 séries par modem à 845 000",
         sub="Le catalogue de FRED depuis sa naissance, le 18 avril 1991",
@@ -69,9 +73,10 @@ FIG_01 = '''L = {
              "warehouse in the world. Source: Federal Reserve Bank of St. Louis."),
 }[LANG]
 
+# ── Figure ───────────────────────────────────────────────────────────────────
 fig = nm.figure(height_px=1045)
 ax = nm.axes(fig, left=0.137)
-ax.plot(years, series, color=nm.COLORS["blue"], linewidth=3.6,
+ax.plot(years, series_count, color=nm.COLORS["blue"], linewidth=3.6,
         marker="o", markersize=13, clip_on=False, zorder=3)
 ax.set_yscale("log")
 ax.set_ylim(20, 2_000_000)
@@ -94,16 +99,13 @@ nm.footer(fig, L["note"])'''
 
 # ── Figure 02 — chômage + bandes de récession NBER ───────────────────────────
 
-DATA_02 = '''import pandas as pd
+DATA_02 = '''# Données FRED en direct (CSV public, sans clé API) / live FRED data (no API key)
+unemployment = nm.load_fred("UNRATE")                       # taux de chômage / unemployment rate
+recessions = nm.load_fred("USREC", start=str(unemployment.index[0].year))  # récessions NBER
+unemployment.tail()'''
 
-# Données FRED en direct (CSV public, sans clé API) / live FRED data (no API key)
-FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id="
-unrate = pd.read_csv(FRED + "UNRATE", index_col="observation_date", parse_dates=True)["UNRATE"]
-usrec  = pd.read_csv(FRED + "USREC",  index_col="observation_date", parse_dates=True)["USREC"]
-usrec  = usrec.loc[unrate.index.min():]   # même fenêtre que le chômage / same window
-unrate.tail()'''
-
-FIG_02 = '''L = {
+FIG_02 = '''# ── Libellés bilingues / bilingual labels ────────────────────────────────────
+L = {
     "fr": dict(
         title="Ce que vous saurez fabriquer en trois clics",
         sub="Taux de chômage américain, avec les récessions du NBER — un graphique FRED type",
@@ -120,20 +122,21 @@ FIG_02 = '''L = {
              "peak hugs a grey band. Source: BLS and NBER via FRED (UNRATE, USREC)."),
 }[LANG]
 
+# ── Figure ───────────────────────────────────────────────────────────────────
 import matplotlib.dates as mdates
 
 fig = nm.figure(height_px=1045)
 ax = nm.axes(fig)
 
-# Chaque période contiguë où USREC == 1 devient une bande grise
-# / each contiguous run of USREC == 1 becomes a grey band
-runs = usrec.ne(usrec.shift()).cumsum()
-for _, seg in usrec.groupby(runs):
-    if seg.iloc[0] == 1:
-        ax.axvspan(seg.index[0], seg.index[-1], color=nm.COLORS["edge"],
+# Ombrer chaque période de récession (suites contiguës où USREC == 1).
+# Shade each recession (contiguous runs where USREC == 1).
+runs = recessions.ne(recessions.shift()).cumsum()
+for _, run in recessions.groupby(runs):
+    if run.iloc[0] == 1:
+        ax.axvspan(run.index[0], run.index[-1], color=nm.COLORS["edge"],
                    alpha=0.75, linewidth=0)
 
-ax.plot(unrate.index, unrate, color=nm.COLORS["blue"], linewidth=2.9)
+ax.plot(unemployment.index, unemployment, color=nm.COLORS["blue"], linewidth=2.9)
 ax.set_ylim(0, 15.5)
 ax.set_yticks(range(0, 15, 2))
 ax.set_ylabel(L["ylab"])
@@ -148,22 +151,21 @@ nm.footer(fig, L["note"])'''
 
 # ── Figure 03 — IPC : niveau vs variation sur un an ──────────────────────────
 
-DATA_03 = '''import pandas as pd
+DATA_03 = '''# Indice des prix à la consommation, en direct depuis FRED / CPI, live from FRED
+cpi = nm.load_fred("CPIAUCSL")
 
-FRED = "https://fred.stlouisfed.org/graph/fredgraph.csv?id="
-cpi = pd.read_csv(FRED + "CPIAUCSL", index_col="observation_date", parse_dates=True)["CPIAUCSL"]
+# « Variation sur un an » : la transformation qui change un niveau en inflation.
+# "Change from year ago": the transformation that turns a level into inflation.
+inflation = (cpi / cpi.shift(12) - 1) * 100
 
-# « Variation sur un an » : la transformation qui change un niveau en inflation
-# / "Change from year ago": the transformation that turns a level into inflation
-infl = (cpi / cpi.shift(12) - 1) * 100
+cpi, inflation = cpi.loc["1995":], inflation.loc["1995":]
+print(f"Dernier point / latest: {inflation.index[-1]:%Y-%m} \\u2192 {inflation.iloc[-1]:.1f} %")'''
 
-cpi, infl = cpi.loc["1995":], infl.loc["1995":]
-print(f"Dernier point / latest: {infl.index[-1]:%Y-%m} → {infl.iloc[-1]:.1f} %")'''
-
-FIG_03 = '''MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+FIG_03 = '''# ── Libellés bilingues / bilingual labels ────────────────────────────────────
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
         "août", "septembre", "octobre", "novembre", "décembre"]
-last, when = infl.iloc[-1], infl.index[-1]
-last_fr = f"{last:.1f}".replace(".", ",")   # 3.5 → « 3,5 » pour la note française
+latest, when = inflation.iloc[-1], inflation.index[-1]
+latest_fr = f"{latest:.1f}".replace(".", ",")   # 3.5 → « 3,5 » pour la note française
 
 L = {
     "fr": dict(
@@ -172,7 +174,7 @@ L = {
         y1="« Niveau »", y2="« Variation sur un an », %",
         lab1="l'indice des prix (IPC)", target="cible 2 %",
         note="Le même indice des prix, vu comme « Niveau » (en haut) puis comme « Variation sur un an » (en bas) : c'est\\n"
-             f"ainsi qu'on lit l'inflation, à {last_fr} % en {MOIS[when.month - 1]} {when.year} (dernier point). "
+             f"ainsi qu'on lit l'inflation, à {latest_fr} % en {MOIS[when.month - 1]} {when.year} (dernier point). "
              "Source : BLS via FRED (CPIAUCSL)."),
     "en": dict(
         title="The same series, two stories",
@@ -180,9 +182,10 @@ L = {
         y1="« Level »", y2="« Change from year ago », %",
         lab1="the price index (CPI)", target="2% target",
         note="The same price index, seen as « Level » (top) then as « Change from year ago » (bottom): that is how you\\n"
-             f"read inflation, at {last:.1f}% in {when:%B %Y} (latest point). Source: BLS via FRED (CPIAUCSL)."),
+             f"read inflation, at {latest:.1f}% in {when:%B %Y} (latest point). Source: BLS via FRED (CPIAUCSL)."),
 }[LANG]
 
+# ── Figure : deux panneaux (niveau en haut, variation en bas) ─────────────────
 import matplotlib.dates as mdates
 
 fig = nm.figure(height_px=1140)
@@ -196,7 +199,7 @@ ax1.text(0.065, 0.80, L["lab1"], transform=ax1.transAxes, fontsize=21.5,
          color=nm.COLORS["muted"])
 ax1.tick_params(labelbottom=False)
 
-ax2.plot(infl.index, infl, color=nm.COLORS["rose"], linewidth=3.2)
+ax2.plot(inflation.index, inflation, color=nm.COLORS["rose"], linewidth=3.2)
 ax2.axhline(2, color=nm.COLORS["amber"], linestyle=(0, (6, 4)), linewidth=2.6)
 ax2.axhline(0, color=nm.COLORS["muted"], linewidth=1.6, alpha=0.9)
 ax2.set_ylabel(L["y2"])
@@ -219,7 +222,8 @@ nm.footer(fig, L["note"])'''
 DATA_04 = '''# Les sept codes de la trousse de départ (fixes) / the seven starter-kit codes
 CODES = ["GDPC1", "CPIAUCSL", "UNRATE", "PAYEMS", "FEDFUNDS", "DGS10", "USREC"]'''
 
-FIG_04 = '''L = {
+FIG_04 = '''# ── Libellés bilingues / bilingual labels ────────────────────────────────────
+L = {
     "fr": dict(
         title="La trousse de départ du macro-observateur",
         sub="Sept codes FRED à mettre en favori — l'essentiel d'une économie",
@@ -234,6 +238,7 @@ FIG_04 = '''L = {
               "10-year yield", "recessions (NBER)"]),
 }[LANG]
 
+# ── Figure (schéma : sept encadrés code + description) ────────────────────────
 fig = nm.figure(height_px=1140)
 ax = nm.blank_axes(fig)
 
@@ -256,7 +261,8 @@ nm.footer(fig)'''
 DATA_05 = '''# Schéma : rien à charger (les entrées vivent dans la cellule figure)
 # Diagram: nothing to load (entries live in the figure cell)'''
 
-FIG_05 = '''L = {
+FIG_05 = '''# ── Libellés bilingues / bilingual labels ────────────────────────────────────
+L = {
     "fr": dict(
         title="FRED n'est pas seul : ses cousins",
         sub="Où trouver les données quand elles ne sont pas américaines",
@@ -281,6 +287,7 @@ FIG_05 = '''L = {
         ]),
 }[LANG]
 
+# ── Figure (schéma : trois cartes régionales) ────────────────────────────────
 fig = nm.figure(height_px=1007)
 ax = nm.blank_axes(fig)
 
