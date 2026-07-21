@@ -16,24 +16,39 @@ import sys
 
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.join(TOOLS, "..", "nmlab-figures")
-NB_DIR = "macro/18-atelier-donnees-fred"
 RAW = "https://raw.githubusercontent.com/nmlab-finance/nmlab-figures/main/nmlab_style.py"
 
-ARTICLE_FR = "https://nmlab.io/ressources/atelier-donnees-decouvrir-fred"
-ARTICLE_EN = "https://nmlab.io/en/ressources/data-workshop-discovering-fred"
+# Un chapitre = dossier de notebooks + méta pour la cellule d'introduction.
+CHAPTERS = {
+    "18": dict(
+        dir="macro/18-atelier-donnees-fred",
+        title_fr="Atelier données : découvrir FRED, l'entrepôt de la Réserve fédérale",
+        title_en="Data Workshop: Discovering FRED, the Federal Reserve's Warehouse",
+        slug_fr="atelier-donnees-decouvrir-fred",
+        slug_en="data-workshop-discovering-fred"),
+    "19": dict(
+        dir="macro/19-premier-script-python",
+        title_fr="Premier script Python : charger une série FRED et la tracer en dix lignes",
+        title_en="Your First Python Script: Load a FRED Series and Plot It in Ten Lines",
+        slug_fr="premier-script-python-fred",
+        slug_en="first-python-script-fred"),
+}
 
 
 # ── Cellule d'introduction (markdown) ────────────────────────────────────────
 
-def intro_md(title_fr, title_en, live=True):
+def intro_md(chapter, fig_fr, fig_en, live=True):
+    c = CHAPTERS[chapter]
+    art_fr = f"https://nmlab.io/ressources/{c['slug_fr']}"
+    art_en = f"https://nmlab.io/en/ressources/{c['slug_en']}"
     run_fr = ("la figure se régénère avec les **données FRED du jour**" if live
               else "la figure est régénérée par le code — un **schéma éditable** : changez les libellés à votre guise")
     run_en = ("rebuild the figure with **today's FRED data**" if live
               else "rebuild the figure from code — an **editable diagram**: change the labels as you like")
-    return f"""# {title_fr} · *{title_en}*
+    return f"""# {fig_fr} · *{fig_en}*
 
-Notebook compagnon du chapitre **18. Atelier données : découvrir FRED, l'entrepôt de la Réserve fédérale** — [lire l'article]({ARTICLE_FR}).
-Companion notebook to chapter **18. Data Workshop: Discovering FRED** — [read the article]({ARTICLE_EN}).
+Notebook compagnon du chapitre **{chapter}. {c['title_fr']}** — [lire l'article]({art_fr}).
+Companion notebook to chapter **{chapter}. {c['title_en']}** — [read the article]({art_en}).
 
 **Exécutez l'unique cellule ci-dessous** (bouton ▶ ou Ctrl+Entrée) : {run_fr}. Passez `LANG = "en"` en tête de cellule pour les libellés anglais. — Run the single cell below (▶ or Ctrl+Enter) to {run_en}; set `LANG = "en"` at the top for English labels.
 
@@ -359,6 +374,300 @@ def build_figure(cards: list[tuple[str, str, list[str]]], lang: str) -> Figure:
 build_figure(cousins(LANG), LANG)'''
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Chapitre 19 — Premier script Python
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── Figure 19.01 — PIB réel (GDPC1) en aire (FRED en direct) ──────────────────
+
+DATA_19_01 = '''from pandas import Series
+
+def load_gdp() -> Series:
+    """PIB réel des États-Unis (GDPC1), en direct depuis FRED / U.S. real GDP, live from FRED."""
+    return nm.load_fred("GDPC1")
+
+gdp = load_gdp()'''
+
+FIG_19_01 = '''import matplotlib.dates as mdates
+from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="Ce que produisent huit lignes de Python",
+        sub="Le PIB réel des États-Unis (GDPC1), chargé depuis FRED et tracé",
+        ylab="milliards de dollars de 2017"),
+    "en": dict(
+        title="What eight lines of Python produce",
+        sub="U.S. real GDP (GDPC1), loaded from FRED and plotted",
+        ylab="billions of 2017 dollars"),
+}
+
+def caption(gdp: Series, lang: str) -> str:
+    """Note dynamique : le dernier point de PIB / dynamic note: the latest GDP point."""
+    latest, when = gdp.iloc[-1], gdp.index[-1]
+    quarter = (when.month - 1) // 3 + 1
+    if lang == "fr":
+        value = f"{latest:,.0f}".replace(",", " ")
+        ordinal = "1ᵉʳ" if quarter == 1 else f"{quarter}ᵉ"
+        return ("Aucun fichier à télécharger à la main : le script va chercher la série directement sur FRED et la dessine.\\n"
+                f"Dernier point : {value} milliards au {ordinal} trimestre {when.year}. Source : BEA via FRED (GDPC1).")
+    return ("Nothing to download by hand: the script fetches the series straight from FRED and draws it.\\n"
+            f"Latest point: ${latest:,.0f} billion in Q{quarter} {when.year}. Source: BEA via FRED (GDPC1).")
+
+def build_figure(gdp: Series, lang: str) -> Figure:
+    """PIB réel en aire remplie, sur toute la période disponible."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1026)
+    ax = nm.axes(fig, left=0.12)
+    ax.fill_between(gdp.index, gdp, color=nm.COLORS["blue"], alpha=0.14)
+    ax.plot(gdp.index, gdp, color=nm.COLORS["blue"], linewidth=2.9)
+    ax.set_ylim(0, 26_000)
+    ax.set_yticks(range(0, 26_000, 5000))
+    ax.yaxis.set_major_formatter(nm.thousands(lang))
+    ax.set_ylabel(text["ylab"])
+    ax.margins(x=0.01)
+    ax.xaxis.set_major_locator(mdates.YearLocator(10))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, caption(gdp, lang))
+    return fig
+
+build_figure(gdp, LANG)'''
+
+
+# ── Figure 19.02 — glissement annuel du PIB (FRED en direct) ──────────────────
+
+DATA_19_02 = '''from pandas import Series
+
+def load_gdp_growth() -> Series:
+    """Croissance du PIB réel sur un an / real GDP year-over-year growth.
+    pct_change(4) car le PIB est trimestriel / pct_change(4) since GDP is quarterly."""
+    gdp = nm.load_fred("GDPC1")
+    return (gdp.pct_change(4) * 100).dropna()
+
+growth = load_gdp_growth()'''
+
+FIG_19_02 = '''import matplotlib.dates as mdates
+from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="Une ligne de plus, une autre histoire",
+        sub="La même série, transformée en glissement annuel par « pct_change »",
+        ylab="croissance du PIB réel sur un an, %",
+        covid="COVID : −7,5 %\\npuis +12,4 %",
+        note="df.pct_change(4)*100 : une instruction, et le niveau devient un taux de croissance — krach COVID et\\n"
+             "rebond compris. C'est là que le code dépasse la souris. Source : BEA via FRED (GDPC1)."),
+    "en": dict(
+        title="One more line, another story",
+        sub="The same series, turned into year-over-year growth by « pct_change »",
+        ylab="real GDP growth year over year, %",
+        covid="COVID: −7.5%\\nthen +12.4%",
+        note="df.pct_change(4)*100: one instruction, and the level becomes a growth rate — COVID crash and\\n"
+             "rebound included. That is where code beats the mouse. Source: BEA via FRED (GDPC1)."),
+}
+
+def build_figure(growth: Series, lang: str) -> Figure:
+    """Glissement annuel : ligne claire, aire bleue (>0) et rose (<0)."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1026)
+    ax = nm.axes(fig)
+    ax.fill_between(growth.index, growth, 0, where=growth >= 0,
+                    color=nm.COLORS["blue"], alpha=0.5, interpolate=True)
+    ax.fill_between(growth.index, growth, 0, where=growth < 0,
+                    color=nm.COLORS["rose"], alpha=0.5, interpolate=True)
+    ax.plot(growth.index, growth, color=nm.COLORS["text"], linewidth=1.6)
+    ax.axhline(0, color=nm.COLORS["muted"], linewidth=1.4, alpha=0.9)
+    ax.set_ylim(-10, 14)
+    ax.set_yticks(range(-10, 11, 5))
+    ax.set_ylabel(text["ylab"])
+    ax.margins(x=0.01)
+    ax.xaxis.set_major_locator(mdates.YearLocator(10))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    # Annotation sur le creux COVID de 2020 / annotate the 2020 COVID trough
+    trough = growth.loc["2020"].idxmin()
+    ax.annotate(text["covid"], xy=(trough, growth.loc[trough]), xytext=(-150, 34),
+                textcoords="offset points", ha="right", va="center", fontsize=22,
+                fontweight="bold", color=nm.COLORS["rose"], linespacing=1.5,
+                arrowprops=dict(arrowstyle="->", color=nm.COLORS["rose"], lw=1.8))
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(growth, LANG)'''
+
+
+# ── Figure 19.03 — PIB réel + bandes de récession NBER (FRED en direct) ───────
+
+DATA_19_03 = '''from pandas import Series
+
+def load_data() -> tuple[Series, Series]:
+    """PIB réel (GDPC1) et indicateur de récession NBER (USREC), en direct de FRED.
+    Real GDP and the NBER recession flag, live from FRED."""
+    gdp = nm.load_fred("GDPC1")
+    recessions = nm.load_fred("USREC", start=str(gdp.index[0].year))
+    return gdp, recessions
+
+gdp, recessions = load_data()'''
+
+FIG_19_03 = '''import matplotlib.dates as mdates
+from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="Cinq lignes de plus, et le cycle apparaît",
+        sub="Le PIB réel avec les récessions du NBER, ajoutées par une boucle",
+        ylab="milliards de dollars de 2017",
+        bands="bandes grises =\\nrécessions (NBER)",
+        note="Une petite boucle sur la série USREC, un axvspan par récession, et votre graphique parle comme celui d'un\\n"
+             "professionnel. Chaque récession y creuse une marche. Source : BEA et NBER via FRED (GDPC1, USREC)."),
+    "en": dict(
+        title="Five more lines, and the cycle appears",
+        sub="U.S. real GDP with NBER recessions, added by a loop",
+        ylab="billions of 2017 dollars",
+        bands="grey bands =\\nrecessions (NBER)",
+        note="A small loop over the USREC series, one axvspan per recession, and your chart speaks like a\\n"
+             "professional's. Every recession carves a step. Source: BEA and NBER via FRED (GDPC1, USREC)."),
+}
+
+def build_figure(gdp: Series, recessions: Series, lang: str) -> Figure:
+    """PIB réel ombré des récessions du NBER."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1026)
+    ax = nm.axes(fig, left=0.12)
+    runs = recessions.ne(recessions.shift()).cumsum()
+    for _, run in recessions.groupby(runs):
+        if run.iloc[0] == 1:
+            ax.axvspan(run.index[0], run.index[-1], color=nm.COLORS["edge"], alpha=0.75, linewidth=0)
+    ax.plot(gdp.index, gdp, color=nm.COLORS["blue"], linewidth=2.9)
+    ax.set_ylim(0, 26_000)
+    ax.set_yticks(range(0, 26_000, 5000))
+    ax.yaxis.set_major_formatter(nm.thousands(lang))
+    ax.set_ylabel(text["ylab"])
+    ax.margins(x=0.01)
+    ax.xaxis.set_major_locator(mdates.YearLocator(10))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    ax.text(0.085, 0.80, text["bands"], transform=ax.transAxes, fontsize=21.5,
+            color=nm.COLORS["muted"], linespacing=1.55)
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(gdp, recessions, LANG)'''
+
+
+# ── Figure 19.04 — l'erreur Reinhart-Rogoff (données embarquées) ──────────────
+
+DATA_19_04 = '''def reinhart_rogoff() -> list[float]:
+    """Croissance moyenne au-delà de 90 % de dette : résultat publié vs corrigé (%).
+    Average growth above 90% debt: published vs corrected (Herndon, Ash & Pollin, 2013)."""
+    return [-0.1, 2.2]'''
+
+FIG_19_04 = '''from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="Cinq pays oubliés, une conclusion inversée",
+        sub="Croissance moyenne des pays très endettés, avant et après correction",
+        ylab="croissance moyenne au-delà de 90 % de dette, %",
+        cats=["résultat publié\\n(erreur Excel)", "résultat corrigé\\n(Herndon, 2013)"],
+        value_labels=["−0,1 %", "+2,2 %"],
+        note="Une formule Excel portant sur les lignes 30-44 au lieu de 30-49 excluait cinq pays. Corrigée, la\\n"
+             "« contraction » de −0,1 % devient une croissance de +2,2 %. Source : Herndon, Ash & Pollin (2013)."),
+    "en": dict(
+        title="Five countries forgotten, a conclusion reversed",
+        sub="Average growth of highly indebted countries, before and after correction",
+        ylab="average growth above 90% debt, %",
+        cats=["published result\\n(Excel error)", "corrected result\\n(Herndon, 2013)"],
+        value_labels=["−0.1%", "+2.2%"],
+        note="An Excel formula spanning rows 30-44 instead of 30-49 excluded five countries. Corrected, the\\n"
+             "« contraction » of −0.1% becomes growth of +2.2%. Source: Herndon, Ash & Pollin (2013)."),
+}
+
+def build_figure(values: list[float], lang: str) -> Figure:
+    """Deux barres : le résultat publié (erroné) contre le résultat corrigé."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1102)
+    ax = nm.axes(fig, bottom=0.24)
+    ax.grid(axis="x", visible=False)
+    positions = range(len(values))
+    ax.bar(positions, values, width=0.55, color=[nm.COLORS["rose"], nm.COLORS["blue"]], zorder=3)
+    ax.axhline(0, color=nm.COLORS["text"], linewidth=1.6, alpha=0.85)
+    ax.set_ylim(-1.3, 3.2)
+    ax.set_yticks(range(-1, 4))
+    ax.set_ylabel(text["ylab"])
+    ax.set_xlim(-0.6, 1.6)
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(text["cats"], fontsize=21.5, color=nm.COLORS["muted"], linespacing=1.5)
+    for pos, value, label in zip(positions, values, text["value_labels"]):
+        above = value >= 0
+        ax.annotate(label, (pos, value), xytext=(0, 14 if above else -14),
+                    textcoords="offset points", ha="center", va="bottom" if above else "top",
+                    fontsize=34, fontweight="bold", color=nm.COLORS["text"])
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(reinhart_rogoff(), LANG)'''
+
+
+# ── Figure 19.05 — pourquoi coder : trois pouvoirs (schéma) ───────────────────
+
+DATA_19_05 = '''def powers(lang: str) -> list[tuple[str, str, list[str]]]:
+    """Les trois pouvoirs du clavier : (nom, couleur, lignes), localisés.
+    The three powers of the keyboard: (name, color, lines), localized."""
+    if lang == "fr":
+        return [
+            ("Reproductibilité", nm.COLORS["blue"],
+             ["un script se relit,", "se corrige, se partage —", "un clic ne laisse rien"]),
+            ("Échelle", nm.COLORS["amber"],
+             ["cent graphiques", "au lieu d'un,", "recalculés chaque matin"]),
+            ("Puissance", nm.COLORS["rose"],
+             ["la donnée en mémoire,", "tout le calcul", "du monde s'ouvre"]),
+        ]
+    return [
+        ("Reproducibility", nm.COLORS["blue"],
+         ["a script is re-read,", "fixed and shared —", "a click leaves nothing"]),
+        ("Scale", nm.COLORS["amber"],
+         ["a hundred charts", "instead of one,", "recomputed every morning"]),
+        ("Power", nm.COLORS["rose"],
+         ["the data in memory,", "all the computation", "in the world opens up"]),
+    ]'''
+
+FIG_19_05 = '''from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(title="Pourquoi coder, après la souris",
+               sub="Trois pouvoirs que le clavier seul apporte"),
+    "en": dict(title="Why code, after the mouse",
+               sub="Three powers the keyboard alone brings"),
+}
+
+def build_figure(cards: list[tuple[str, str, list[str]]], lang: str) -> Figure:
+    """Schéma : trois cartes colorées (un pouvoir par carte)."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1007)
+    ax = nm.blank_axes(fig)
+
+    card_w, gap, x0 = 486, 94, 55
+    top, bottom = 737, 177                  # bords haut / bas des cartes (px)
+    for i, (name, color, lines) in enumerate(cards):
+        x = x0 + i * (card_w + gap)
+        center_x = x + card_w / 2
+        nm.card(ax, x, bottom, card_w, top - bottom, edge=color, lw=2.6, radius=24)
+        ax.text(center_x, top - 58, name, ha="center", va="center",
+                fontsize=31, fontweight="bold", color=color)
+        for j, line in enumerate(lines):
+            ax.text(center_x, 495 - j * 47, line, ha="center", va="center",
+                    fontsize=26, color=nm.COLORS["text"])
+
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig)
+    return fig
+
+build_figure(powers(LANG), LANG)'''
+
+
 # ── Gabarit pour les prochaines figures ──────────────────────────────────────
 
 TEMPLATE_MD = """# Gabarit de figure NMLab · *NMLab figure template*
@@ -407,33 +716,62 @@ build_figure(load_data(), LANG)'''
 
 # ── Assemblage ───────────────────────────────────────────────────────────────
 
+DIR_18 = CHAPTERS["18"]["dir"]
+DIR_19 = CHAPTERS["19"]["dir"]
+
 NOTEBOOKS = {
     "templates/template-figure.ipynb": (
         TEMPLATE_MD,
         [SETUP, TEMPLATE_DATA, TEMPLATE_FIG],
     ),
-    "fig01-croissance-fred.ipynb": (
-        intro_md("De 30 séries par modem à 845 000", "From 30 series by modem to 845,000"),
+    # ── Chapitre 18 — Atelier données : découvrir FRED ───────────────────────
+    f"{DIR_18}/fig01-croissance-fred.ipynb": (
+        intro_md("18", "De 30 séries par modem à 845 000", "From 30 series by modem to 845,000"),
         [SETUP, DATA_01, FIG_01],
     ),
-    "fig02-recession-bands.ipynb": (
-        intro_md("Ce que vous saurez fabriquer en trois clics",
+    f"{DIR_18}/fig02-recession-bands.ipynb": (
+        intro_md("18", "Ce que vous saurez fabriquer en trois clics",
                  "What you'll be able to make in three clicks"),
         [SETUP, DATA_02, FIG_02],
     ),
-    "fig03-transformations.ipynb": (
-        intro_md("La même série, deux histoires", "The same series, two stories"),
+    f"{DIR_18}/fig03-transformations.ipynb": (
+        intro_md("18", "La même série, deux histoires", "The same series, two stories"),
         [SETUP, DATA_03, FIG_03],
     ),
-    "fig04-trousse-depart.ipynb": (
-        intro_md("La trousse de départ du macro-observateur",
+    f"{DIR_18}/fig04-trousse-depart.ipynb": (
+        intro_md("18", "La trousse de départ du macro-observateur",
                  "The macro-watcher's starter kit", live=False),
         [SETUP, DATA_04, FIG_04],
     ),
-    "fig05-cousins-fred.ipynb": (
-        intro_md("FRED n'est pas seul : ses cousins", "FRED is not alone: its cousins",
+    f"{DIR_18}/fig05-cousins-fred.ipynb": (
+        intro_md("18", "FRED n'est pas seul : ses cousins", "FRED is not alone: its cousins",
                  live=False),
         [SETUP, DATA_05, FIG_05],
+    ),
+    # ── Chapitre 19 — Premier script Python ──────────────────────────────────
+    f"{DIR_19}/fig01-pib-reel.ipynb": (
+        intro_md("19", "Ce que produisent huit lignes de Python",
+                 "What eight lines of Python produce"),
+        [SETUP, DATA_19_01, FIG_19_01],
+    ),
+    f"{DIR_19}/fig02-glissement-annuel.ipynb": (
+        intro_md("19", "Une ligne de plus, une autre histoire", "One more line, another story"),
+        [SETUP, DATA_19_02, FIG_19_02],
+    ),
+    f"{DIR_19}/fig03-bandes-recession.ipynb": (
+        intro_md("19", "Cinq lignes de plus, et le cycle apparaît",
+                 "Five more lines, and the cycle appears"),
+        [SETUP, DATA_19_03, FIG_19_03],
+    ),
+    f"{DIR_19}/fig04-reinhart-rogoff.ipynb": (
+        intro_md("19", "Cinq pays oubliés, une conclusion inversée",
+                 "Five countries forgotten, a conclusion reversed", live=False),
+        [SETUP, DATA_19_04, FIG_19_04],
+    ),
+    f"{DIR_19}/fig05-pourquoi-coder.ipynb": (
+        intro_md("19", "Pourquoi coder, après la souris", "Why code, after the mouse",
+                 live=False),
+        [SETUP, DATA_19_05, FIG_19_05],
     ),
 }
 
@@ -447,8 +785,7 @@ def as_cell(kind, src):
 
 def build():
     for name, (intro, codes) in NOTEBOOKS.items():
-        rel = name if "/" in name else f"{NB_DIR}/{name}"
-        path = os.path.join(REPO, rel)
+        path = os.path.join(REPO, name)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         nb = {
             "nbformat": 4, "nbformat_minor": 5,
