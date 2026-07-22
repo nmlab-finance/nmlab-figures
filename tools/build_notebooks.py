@@ -32,19 +32,30 @@ CHAPTERS = {
         title_en="Your First Python Script: Load a FRED Series and Plot It in Ten Lines",
         slug_fr="premier-script-python-fred",
         slug_en="first-python-script-fred"),
+    "20": dict(
+        dir="macro/20-croissance-deja-anticipee",
+        title_fr="La croissance déjà anticipée : pourquoi elle est souvent dans les cours",
+        title_en="Growth Already Anticipated: Why It's Often Already in the Price",
+        slug_fr="croissance-deja-anticipee-dans-les-cours",
+        slug_en="growth-already-priced-in"),
 }
 
 
 # ── Cellule d'introduction (markdown) ────────────────────────────────────────
 
-def intro_md(chapter, fig_fr, fig_en, live=True):
+def intro_md(chapter, fig_fr, fig_en, live=True, source=None):
     c = CHAPTERS[chapter]
     art_fr = f"https://nmlab.io/ressources/{c['slug_fr']}"
     art_en = f"https://nmlab.io/en/ressources/{c['slug_en']}"
-    run_fr = ("la figure se régénère avec les **données FRED du jour**" if live
-              else "la figure est régénérée par le code — un **schéma éditable** : changez les libellés à votre guise")
-    run_en = ("rebuild the figure with **today's FRED data**" if live
-              else "rebuild the figure from code — an **editable diagram**: change the labels as you like")
+    if source:                                        # données réelles non-FRED (ex. Shiller)
+        run_fr = f"la figure se régénère à partir des **{source[0]}**"
+        run_en = f"rebuild the figure from **{source[1]}**"
+    elif live:
+        run_fr = "la figure se régénère avec les **données FRED du jour**"
+        run_en = "rebuild the figure with **today's FRED data**"
+    else:
+        run_fr = "la figure est régénérée par le code — un **schéma éditable** : changez les libellés à votre guise"
+        run_en = "rebuild the figure from code — an **editable diagram**: change the labels as you like"
     return f"""# {fig_fr} · *{fig_en}*
 
 Notebook compagnon du chapitre **{chapter}. {c['title_fr']}** — [lire l'article]({art_fr}).
@@ -668,6 +679,359 @@ def build_figure(cards: list[tuple[str, str, list[str]]], lang: str) -> Figure:
 build_figure(powers(LANG), LANG)'''
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# Chapitre 20 — La croissance déjà anticipée
+# ═════════════════════════════════════════════════════════════════════════════
+
+# ── Chargeur partagé des données de Robert Shiller (CAPE) ─────────────────────
+
+SHILLER_DATA = '''import io
+import urllib.request
+import pandas as pd
+from pandas import DataFrame
+
+SHILLER_URL = "http://www.econ.yale.edu/~shiller/data/ie_data.xls"
+
+def load_shiller() -> DataFrame:
+    """Données historiques de Robert Shiller (ie_data.xls) : CAPE mensuel et rendement
+    réel des actions sur 10 ans (colonnes précalculées par Shiller), depuis 1871.
+    Robert Shiller's historical data: monthly CAPE and the 10-year real stock return."""
+    try:                                              # moteur .xls (préinstallé sur Colab)
+        import xlrd  # noqa: F401
+    except ModuleNotFoundError:
+        import subprocess, sys
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "xlrd"], check=True)
+    raw = urllib.request.urlopen(SHILLER_URL, timeout=60).read()
+    sheet = pd.read_excel(io.BytesIO(raw), sheet_name="Data", header=7, engine="xlrd")
+    df = pd.DataFrame({
+        "year":  pd.to_numeric(sheet.iloc[:, 5], errors="coerce"),          # année décimale
+        "cape":  pd.to_numeric(sheet.iloc[:, 12], errors="coerce"),         # CAPE (P/E10)
+        "ret10": pd.to_numeric(sheet.iloc[:, 19], errors="coerce") * 100,   # rendement réel 10 ans, %
+    })
+    return df.dropna(subset=["year"])
+
+shiller = load_shiller()'''
+
+
+# ── Figure 20.01 — le paradoxe BRIC (schéma à deux cartes) ────────────────────
+
+DATA_20_01 = '''def bric_cards(lang: str) -> list[tuple[str, str, list[list[str]]]]:
+    """Les deux volets du paradoxe BRIC : (titre, couleur, paragraphes), localisés.
+    The two sides of the BRIC paradox: (title, color, paragraphs), localized."""
+    if lang == "fr":
+        return [
+            ("La croissance promise", nm.COLORS["blue"],
+             [["Brésil, Russie,", "Inde, Chine"],
+              ["une décennie de", "croissance record"],
+              ["la promesse tenue"]]),
+            ("Le fonds BRIC", nm.COLORS["rose"],
+             [["depuis 2010"],
+              ["− 88 %", "de valeur"],
+              ["fermé en octobre 2015"]]),
+        ]
+    return [
+        ("The promised growth", nm.COLORS["blue"],
+         [["Brazil, Russia,", "India, China"],
+          ["a decade of", "record growth"],
+          ["the promise kept"]]),
+        ("The BRIC fund", nm.COLORS["rose"],
+         [["since 2010"],
+          ["− 88%", "in value"],
+          ["closed in October 2015"]]),
+    ]'''
+
+FIG_20_01 = '''from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="La croissance était réelle. L'investissement, un désastre.",
+        sub="Le paradoxe BRIC : tenir sa promesse de croissance ne fait pas gagner d'argent",
+        note="Les BRIC ont tenu leur promesse de croissance — et le fonds censé en profiter a perdu près de 88 % avant\\n"
+             "de fermer. La croissance connue était déjà dans les prix. Sources : Goldman Sachs ; Bloomberg (2015)."),
+    "en": dict(
+        title="The growth was real. The investment, a disaster.",
+        sub="The BRIC paradox: keeping your growth promise does not make you money",
+        note="The BRICs kept their growth promise — and the fund meant to profit lost nearly 88% before\\n"
+             "closing. The known growth was already in the price. Sources: Goldman Sachs; Bloomberg (2015)."),
+}
+
+def draw_cards(ax, cards, top, bottom):
+    """Deux cartes en regard : titre coloré puis paragraphes centrés."""
+    card_w, gap, x0 = 720, 88, 108
+    for i, (name, color, paras) in enumerate(cards):
+        x = x0 + i * (card_w + gap)
+        cx = x + card_w / 2
+        nm.card(ax, x, bottom, card_w, top - bottom, edge=color, lw=2.6, radius=26)
+        ax.text(cx, top - 62, name, ha="center", va="center",
+                fontsize=31, fontweight="bold", color=color)
+        y = top - 158
+        for para in paras:
+            for line in para:
+                ax.text(cx, y, line, ha="center", va="center",
+                        fontsize=27, color=nm.COLORS["text"])
+                y -= 42
+            y -= 40
+
+def build_figure(cards: list, lang: str) -> Figure:
+    """Schéma : la croissance promise (bleu) face au fonds BRIC (rose)."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1026)
+    ax = nm.blank_axes(fig)
+    draw_cards(ax, cards, top=742, bottom=298)
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(bric_cards(LANG), LANG)'''
+
+
+# ── Figure 20.02 — la croissance facturée d'avance (modèle de Gordon) ─────────
+
+DATA_20_02 = '''def gordon_prices() -> list[float]:
+    """Modèle de Gordon : Prix = dividende / (rendement exigé − croissance).
+    Deux entreprises, même dividende (1 €), même rendement exigé (8 %),
+    croissances attendues de 2 % et 6 %. / Gordon (1956): Price = D / (r − g)."""
+    dividend, required = 1.0, 0.08
+    return [dividend / (required - g) for g in (0.02, 0.06)]
+
+prices = gordon_prices()'''
+
+FIG_20_02 = '''from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="La croissance espérée est facturée d'avance",
+        sub="Deux entreprises, même dividende — mais un prix d'entrée qui triple",
+        ylab="prix payé pour 1 € de dividende",
+        banner="même dividende (1 €), même rendement exigé (8 %)",
+        cats=["Entreprise A\\ncroissance +2 %", "Entreprise B\\ncroissance +6 %"],
+        value_labels=["17 €", "50 €"],
+        note="Si les deux tiennent exactement leur promesse, l'investisseur touche 8 % dans les deux cas : le pari de\\n"
+             "croissance n'a rien rapporté de plus, il a seulement fait payer 3× plus cher. Modèle de Gordon (1956)."),
+    "en": dict(
+        title="Expected growth is billed upfront",
+        sub="Two firms, same dividend — but an entry price that triples",
+        ylab="price paid for €1 of dividend",
+        banner="same dividend (€1), same required return (8%)",
+        cats=["Firm A\\ngrowth +2%", "Firm B\\ngrowth +6%"],
+        value_labels=["€17", "€50"],
+        note="If both keep their promise exactly, the investor earns 8% in each case: the growth bet returned\\n"
+             "nothing extra, it only made you pay 3× more. Gordon model (1956)."),
+}
+
+def build_figure(prices: list[float], lang: str) -> Figure:
+    """Deux barres : le prix d'entrée facturé pour une croissance attendue faible vs forte."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1121)
+    ax = nm.axes(fig, left=0.10, bottom=0.20)
+    ax.grid(axis="x", visible=False)
+    positions = range(len(prices))
+    ax.bar(positions, prices, width=0.62, color=["#c9d4e7", nm.COLORS["blue"]], zorder=3)
+    ax.set_ylim(0, 62)
+    ax.set_yticks(range(0, 61, 10))
+    ax.set_ylabel(text["ylab"])
+    ax.set_xlim(-0.6, 1.6)
+    ax.set_xticks(list(positions))
+    ax.set_xticklabels(text["cats"], fontsize=21.5, color=nm.COLORS["muted"], linespacing=1.5)
+    ax.tick_params(axis="x", length=0)
+    for pos, price, label in zip(positions, prices, text["value_labels"]):
+        ax.annotate(label, (pos, price), xytext=(0, 16), textcoords="offset points",
+                    ha="center", va="bottom", fontsize=38, fontweight="bold", color=nm.COLORS["text"])
+    ax.text(0.5, 0.965, text["banner"], transform=ax.transAxes, ha="center", va="top",
+            fontsize=24, fontweight="bold", color=nm.COLORS["amber"])
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(prices, LANG)'''
+
+
+# ── Figure 20.03 — CAPE de départ vs rendement à 10 ans (Shiller en direct) ───
+
+FIG_20_03 = '''import numpy as np
+from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="Plus vous payez cher, moins vous gagnez",
+        sub="Valorisation de départ et rendement réel des 10 années suivantes, États-Unis, 1881-2024",
+        xlab="CAPE au départ (valorisation)",
+        ylab="rendement réel des 10 années suivantes, %/an",
+        today="aujourd'hui\\n≈ 35-40",
+        expect="rendement réel attendu\\n≈ 0 %/an",
+        corr="corrélation ≈ −0,5",
+        note="Chaque point : un mois depuis 1881. La valorisation de départ « explique » environ un quart du rendement\\n"
+             "à dix ans — modeste, mais le signe est sans appel. Source : données de Robert Shiller (CAPE)."),
+    "en": dict(
+        title="The more you pay, the less you earn",
+        sub="Starting valuation and real return over the next 10 years, United States, 1881-2024",
+        xlab="starting CAPE (valuation)",
+        ylab="real return over the next 10 years, %/yr",
+        today="today\\n≈ 35-40",
+        expect="expected real return\\n≈ 0%/yr",
+        corr="correlation ≈ −0.5",
+        note="Each dot: one month since 1881. The starting valuation « explains » about a quarter of the ten-year\\n"
+             "return — modest, but the sign is unmistakable. Source: Robert Shiller's data (CAPE)."),
+}
+
+def build_figure(shiller: "DataFrame", lang: str) -> Figure:
+    """Nuage CAPE de départ vs rendement réel à 10 ans, avec droite de régression."""
+    text = LABELS[lang]
+    pts = shiller.dropna(subset=["cape", "ret10"])
+    x, y = pts["cape"].to_numpy(), pts["ret10"].to_numpy()
+
+    fig = nm.figure(height_px=1083)
+    ax = nm.axes(fig, left=0.078, bottom=0.155)
+    ax.axvspan(35, 41, color=nm.COLORS["rose"], alpha=0.12, linewidth=0)
+    ax.axhline(0, color=nm.COLORS["blue2"], linewidth=1.6, alpha=0.85)
+    ax.scatter(x, y, s=12, color=nm.COLORS["blue"], alpha=0.32, linewidths=0, zorder=2)
+    slope, intercept = np.polyfit(x, y, 1)
+    line_x = np.array([5, 45])
+    ax.plot(line_x, intercept + slope * line_x, color=nm.COLORS["amber"], linewidth=4.2, zorder=3)
+    ax.set_xlim(4, 46)
+    ax.set_xticks(range(5, 46, 5))
+    ax.set_ylim(-11, 21)
+    ax.set_yticks(range(-10, 21, 5))
+    ax.set_xlabel(text["xlab"])
+    ax.set_ylabel(text["ylab"])
+    ax.text(38, 16.6, text["today"], ha="center", va="center", fontsize=22,
+            fontweight="bold", color=nm.COLORS["rose"], linespacing=1.5)
+    ax.annotate(text["expect"], xy=(37, intercept + slope * 37), xytext=(30.5, -6.6),
+                ha="center", va="center", fontsize=21, color=nm.COLORS["rose"], linespacing=1.5,
+                arrowprops=dict(arrowstyle="->", color=nm.COLORS["rose"], lw=1.8))
+    ax.text(13, -7.3, text["corr"], ha="center", va="center", fontsize=25,
+            fontweight="bold", color=nm.COLORS["text"])
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(shiller, LANG)'''
+
+
+# ── Figure 20.04 — le CAPE de Shiller depuis 1881 (Shiller en direct) ─────────
+
+FIG_20_04 = '''from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="Le futur est déjà, en grande partie, dans les cours",
+        sub="Valorisation des actions américaines depuis 1881 (CAPE de Shiller)",
+        ylab="CAPE (P/E ajusté du cycle)",
+        mean="moyenne longue : 17,5",
+        today="aujourd'hui : ~35-40\\n(97ᵉ centile de l'histoire)",
+        note="À plus du double de sa moyenne longue, la valorisation n'a été dépassée qu'en 1929, 2000 et 2021.\\n"
+             "Elle dit à quel point l'optimisme est déjà payé. Source : données de Robert Shiller."),
+    "en": dict(
+        title="The future is already, largely, in the price",
+        sub="Valuation of U.S. equities since 1881 (Shiller CAPE)",
+        ylab="CAPE (cyclically adjusted P/E)",
+        mean="long-run average: 17.5",
+        today="today: ~35-40\\n(97th percentile of history)",
+        note="At more than twice its long-run average, valuation has been exceeded only in 1929, 2000 and 2021.\\n"
+             "It says how much optimism is already paid for. Source: Robert Shiller's data."),
+}
+
+def build_figure(shiller: "DataFrame", lang: str) -> Figure:
+    """Le CAPE de Shiller mensuel depuis 1881, sa moyenne longue et les pics de 1929/2000/2021."""
+    text = LABELS[lang]
+    s = shiller.dropna(subset=["cape"])
+    year, cape = s["year"].to_numpy(), s["cape"].to_numpy()
+
+    fig = nm.figure(height_px=1064)
+    ax = nm.axes(fig, left=0.072)
+    ax.plot(year, cape, color=nm.COLORS["blue"], linewidth=1.9)
+    ax.axhline(17.5, color=nm.COLORS["text"], linestyle=(0, (7, 5)), linewidth=2.2, alpha=0.9)
+    ax.set_ylim(0, 47)
+    ax.set_yticks(range(0, 41, 10))
+    ax.set_ylabel(text["ylab"])
+    ax.set_xlim(1876, 2030)
+    ax.set_xticks(range(1880, 2021, 20))
+    ax.text(1891, 19.4, text["mean"], fontsize=21, fontweight="bold", color=nm.COLORS["text"])
+    for yr, label in [(1929, "1929"), (2000, "2000"), (2021, "2021")]:
+        peak = cape[(year >= yr - 1.3) & (year <= yr + 1.3)].max()
+        ax.annotate(label, xy=(yr, peak), xytext=(0, 30), textcoords="offset points",
+                    ha="center", va="bottom", fontsize=22, color=nm.COLORS["text"],
+                    arrowprops=dict(arrowstyle="-", color=nm.COLORS["muted"], lw=1.3))
+    ax.scatter([year[-1]], [cape[-1]], s=95, color=nm.COLORS["rose"], zorder=5)
+    ax.annotate(text["today"], xy=(year[-1], cape[-1]), xytext=(1966, 39.2),
+                ha="center", va="center", fontsize=21, fontweight="bold",
+                color=nm.COLORS["rose"], linespacing=1.5,
+                arrowprops=dict(arrowstyle="-", color=nm.COLORS["rose"], lw=1.8))
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(shiller, LANG)'''
+
+
+# ── Figure 20.05 — la récession attendue (schéma à deux cartes) ───────────────
+
+DATA_20_05 = '''def recession_cards(lang: str) -> list[tuple[str, str, list[list[str]]]]:
+    """Les deux volets de la surprise 2023 : (titre, couleur, paragraphes), localisés.
+    The two sides of the 2023 surprise: (title, color, paragraphs), localized."""
+    if lang == "fr":
+        return [
+            ("Ce que le consensus prévoyait", nm.COLORS["rose"],
+             [["Octobre 2022"],
+              ["100 %", "de probabilité de", "récession sous un an", "(modèle Bloomberg Economics)"]]),
+            ("Ce qui s'est passé", nm.COLORS["blue"],
+             [["Année 2023"],
+              ["+ 26 %", "rendement total du", "S&P 500", "(dividendes réinvestis)"]]),
+        ]
+    return [
+        ("What the consensus expected", nm.COLORS["rose"],
+         [["October 2022"],
+          ["100%", "probability of", "recession within a year", "(Bloomberg Economics model)"]]),
+        ("What actually happened", nm.COLORS["blue"],
+         [["Year 2023"],
+          ["+26%", "total return of the", "S&P 500", "(dividends reinvested)"]]),
+    ]'''
+
+FIG_20_05 = '''from matplotlib.figure import Figure
+
+LABELS = {
+    "fr": dict(
+        title="La récession que tout le monde attendait",
+        sub="Le consensus était unanime. Le marché a fait l'inverse.",
+        note="Quand tout le monde attend déjà le pire, le pire est dans les cours : il suffit qu'il n'arrive pas pour que\\n"
+             "le marché s'envole. Sources : Bloomberg Economics (17 oct. 2022) ; rendement total S&P 500 2023."),
+    "en": dict(
+        title="The recession everyone was expecting",
+        sub="The consensus was unanimous. The market did the opposite.",
+        note="When everyone already expects the worst, the worst is in the price: it need only fail to arrive for the\\n"
+             "market to soar. Sources: Bloomberg Economics (Oct. 17, 2022); S&P 500 total return 2023."),
+}
+
+def draw_cards(ax, cards, top, bottom):
+    """Deux cartes en regard : titre coloré puis paragraphes centrés."""
+    card_w, gap, x0 = 720, 88, 108
+    for i, (name, color, paras) in enumerate(cards):
+        x = x0 + i * (card_w + gap)
+        cx = x + card_w / 2
+        nm.card(ax, x, bottom, card_w, top - bottom, edge=color, lw=2.6, radius=26)
+        ax.text(cx, top - 62, name, ha="center", va="center",
+                fontsize=30, fontweight="bold", color=color)
+        y = top - 158
+        for para in paras:
+            for line in para:
+                ax.text(cx, y, line, ha="center", va="center",
+                        fontsize=26, color=nm.COLORS["text"])
+                y -= 42
+            y -= 40
+
+def build_figure(cards: list, lang: str) -> Figure:
+    """Schéma : ce que le consensus prévoyait (rose) face à ce qui s'est passé (bleu)."""
+    text = LABELS[lang]
+    fig = nm.figure(height_px=1045)
+    ax = nm.blank_axes(fig)
+    draw_cards(ax, cards, top=752, bottom=300)
+    nm.header(fig, text["title"], text["sub"])
+    nm.footer(fig, text["note"])
+    return fig
+
+build_figure(recession_cards(LANG), LANG)'''
+
+
 # ── Gabarit pour les prochaines figures ──────────────────────────────────────
 
 TEMPLATE_MD = """# Gabarit de figure NMLab · *NMLab figure template*
@@ -718,6 +1082,9 @@ build_figure(load_data(), LANG)'''
 
 DIR_18 = CHAPTERS["18"]["dir"]
 DIR_19 = CHAPTERS["19"]["dir"]
+DIR_20 = CHAPTERS["20"]["dir"]
+
+SHILLER_SRC = ("données de Robert Shiller (CAPE)", "Robert Shiller's data (CAPE)")
 
 NOTEBOOKS = {
     "templates/template-figure.ipynb": (
@@ -772,6 +1139,32 @@ NOTEBOOKS = {
         intro_md("19", "Pourquoi coder, après la souris", "Why code, after the mouse",
                  live=False),
         [SETUP, DATA_19_05, FIG_19_05],
+    ),
+    # ── Chapitre 20 — La croissance déjà anticipée ───────────────────────────
+    f"{DIR_20}/fig01-paradoxe-bric.ipynb": (
+        intro_md("20", "La croissance était réelle. L'investissement, un désastre.",
+                 "The growth was real. The investment, a disaster.", live=False),
+        [SETUP, DATA_20_01, FIG_20_01],
+    ),
+    f"{DIR_20}/fig02-croissance-facturee.ipynb": (
+        intro_md("20", "La croissance espérée est facturée d'avance",
+                 "Expected growth is billed upfront", live=False),
+        [SETUP, DATA_20_02, FIG_20_02],
+    ),
+    f"{DIR_20}/fig03-cape-rendement.ipynb": (
+        intro_md("20", "Plus vous payez cher, moins vous gagnez",
+                 "The more you pay, the less you earn", source=SHILLER_SRC),
+        [SETUP, SHILLER_DATA, FIG_20_03],
+    ),
+    f"{DIR_20}/fig04-cape-histoire.ipynb": (
+        intro_md("20", "Le futur est déjà, en grande partie, dans les cours",
+                 "The future is already, largely, in the price", source=SHILLER_SRC),
+        [SETUP, SHILLER_DATA, FIG_20_04],
+    ),
+    f"{DIR_20}/fig05-recession-attendue.ipynb": (
+        intro_md("20", "La récession que tout le monde attendait",
+                 "The recession everyone was expecting", live=False),
+        [SETUP, DATA_20_05, FIG_20_05],
     ),
 }
 
