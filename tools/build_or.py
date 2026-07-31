@@ -75,17 +75,29 @@ FX = {"EUR": ("DEXUSEU", True), "JPY": ("DEXJPUS", False), "GBP": ("DEXUSUK", Tr
       "CNY": ("DEXCHUS", False)}
 
 
-def _fetch(url: str, tries: int = 4) -> bytes:
-    """Télécharge une URL, avec quelques reprises (FRED coupe parfois la connexion).
-    Download a URL, retrying a few times (FRED occasionally drops the connection)."""
+def _fetch(url: str, tries: int = 5, headers: dict | None = None,
+           data: str | None = None) -> bytes:
+    """Télécharge une URL, avec reprises. Deux pièges de ces diffuseurs publics :
+    la connexion peut être coupée sans raison, et un quota (HTTP 429) peut s'appliquer
+    quand plusieurs personnes partagent la même adresse — d'où l'attente plus longue.
+    Download with retries: connections get dropped, and shared addresses can hit HTTP 429.
+    """
     import time
     for attempt in range(tries):
         try:
-            return urllib.request.urlopen(url, timeout=90).read()
+            request = urllib.request.Request(url, headers=headers or {},
+                                             data=data.encode() if data else None)
+            return urllib.request.urlopen(request, timeout=120).read()
+        except urllib.error.HTTPError as error:
+            if error.code != 429 or attempt == tries - 1:
+                raise
+            print(f"[or] quota atteint chez le diffuseur, nouvelle tentative dans "
+                  f"{20 * (attempt + 1)} s…")
+            time.sleep(20 * (attempt + 1))
         except Exception:
             if attempt == tries - 1:
                 raise
-            time.sleep(2 * (attempt + 1))
+            time.sleep(3 * (attempt + 1))
     raise RuntimeError("unreachable")
 
 
@@ -297,20 +309,15 @@ OECD = ("https://sdmx.oecd.org/public/rest/data/OECD.SDD.TPS,{dsd}@{flow},1.0/"
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36"}
 
 
-def _fetch_h(url: str, headers: dict | None = None, data: str | None = None, tries: int = 4) -> bytes:
-    """Comme _fetch, mais avec en-têtes et corps POST — certains diffuseurs les exigent.
-    Same as _fetch, with headers and POST body: some publishers require them."""
-    import time
-    for attempt in range(tries):
-        try:
-            request = urllib.request.Request(url, headers=headers or {},
-                                             data=data.encode() if data else None)
-            return urllib.request.urlopen(request, timeout=120).read()
-        except Exception:
-            if attempt == tries - 1:
-                raise
-            time.sleep(3 * (attempt + 1))
-    raise RuntimeError("unreachable")
+def _fetch_h(url: str, headers: dict | None = None, data: str | None = None) -> bytes:
+    """Téléchargement avec en-têtes et corps POST — certains diffuseurs les exigent.
+
+    ⚠️ L'en-tête se choisit par diffuseur : l'OCDE, la Banque d'Angleterre et MOFCOM
+    exigent un en-tête de navigateur, alors que FRED et la RBA le refusent.
+    The header must be chosen per publisher: the OECD, the BoE and MOFCOM require a
+    browser header, while FRED and the RBA reject it.
+    """
+    return _fetch(url, headers=headers, data=data)
 
 
 def _monthly(index, values) -> Series:
